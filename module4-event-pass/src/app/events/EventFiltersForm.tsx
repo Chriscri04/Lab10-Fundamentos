@@ -18,7 +18,7 @@
 
 import { Search, X } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallback } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -28,7 +28,6 @@ import {
   STATUS_LABELS,
   type EventCategory,
 } from '@/types/event';
-import { useState, useEffect, useRef } from 'react';
 import { useDebounce } from '@/hooks/use-debounce';
 
 interface EventFiltersFormProps {
@@ -40,7 +39,6 @@ interface EventFiltersFormProps {
   };
 }
 
-// Labels para mostrar en los badges de filtros activos
 const PRICE_LABELS: Record<string, string> = {
   '0': 'Gratis',
   '25': 'Hasta $25',
@@ -57,11 +55,9 @@ export function EventFiltersForm({ currentFilters }: EventFiltersFormProps): Rea
   const debouncedSearch = useDebounce(searchTerm, 500);
   const isFirstRender = useRef(true);
 
-  // Construye una nueva URL con los params actualizados sin perder los demás
   const updateParams = useCallback(
     (updates: Record<string, string>) => {
       const params = new URLSearchParams(searchParams.toString());
-
       Object.entries(updates).forEach(([key, value]) => {
         if (value) {
           params.set(key, value);
@@ -69,13 +65,11 @@ export function EventFiltersForm({ currentFilters }: EventFiltersFormProps): Rea
           params.delete(key);
         }
       });
-
       router.push(`/events?${params.toString()}`);
     },
     [router, searchParams]
   );
 
-  // Auto-submit del search con debounce
   useEffect(() => {
     if (isFirstRender.current) {
       isFirstRender.current = false;
@@ -88,7 +82,6 @@ export function EventFiltersForm({ currentFilters }: EventFiltersFormProps): Rea
     updateParams({ [key]: e.target.value });
   };
 
-  // Filtros activos para mostrar como badges
   const activeFilters: { key: string; label: string }[] = [];
   if (currentFilters.search) activeFilters.push({ key: 'search', label: `"${currentFilters.search}"` });
   if (currentFilters.category) activeFilters.push({ key: 'category', label: CATEGORY_LABELS[currentFilters.category] });
@@ -109,7 +102,6 @@ export function EventFiltersForm({ currentFilters }: EventFiltersFormProps): Rea
 
   return (
     <div className="space-y-4 rounded-lg border bg-card p-4">
-      {/* Inputs */}
       <div className="space-y-4">
         {/* Búsqueda */}
         <div className="flex gap-2">
