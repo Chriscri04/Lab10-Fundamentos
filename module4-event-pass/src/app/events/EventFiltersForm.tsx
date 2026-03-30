@@ -16,12 +16,19 @@
 
 'use client';
 
-import { Search } from 'lucide-react';
-import Link from 'next/link';
+import { Search, X } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { EVENT_CATEGORIES, CATEGORY_LABELS, EVENT_STATUSES, STATUS_LABELS, type EventCategory } from '@/types/event';
-import { useRef, useState, useEffect } from 'react';
+import {
+  EVENT_CATEGORIES,
+  CATEGORY_LABELS,
+  EVENT_STATUSES,
+  STATUS_LABELS,
+  type EventCategory,
+} from '@/types/event';
+import { useState, useEffect, useRef } from 'react';
 import { useDebounce } from '@/hooks/use-debounce';
 
 interface EventFiltersFormProps {
@@ -33,50 +40,77 @@ interface EventFiltersFormProps {
   };
 }
 
-/**
- * Formulario de filtros de eventos (Client Component).
- */
+// Labels para mostrar en los badges de filtros activos
+const PRICE_LABELS: Record<string, string> = {
+  '0': 'Gratis',
+  '25': 'Hasta $25',
+  '50': 'Hasta $50',
+  '100': 'Hasta $100',
+  '200': 'Hasta $200',
+};
+
 export function EventFiltersForm({ currentFilters }: EventFiltersFormProps): React.ReactElement {
-  const formRef = useRef<HTMLFormElement>(null);
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
-  // Estado local para el input de búsqueda
   const [searchTerm, setSearchTerm] = useState(currentFilters.search ?? '');
-
-  // Valor debounced (retrasado 500ms)
   const debouncedSearch = useDebounce(searchTerm, 500);
-
-  // Ref para evitar bucle infinito en primer render
   const isFirstRender = useRef(true);
 
-  const hasFilters =
-    currentFilters.search || currentFilters.category || currentFilters.priceMax || currentFilters.status;
+  // Construye una nueva URL con los params actualizados sin perder los demás
+  const updateParams = useCallback(
+    (updates: Record<string, string>) => {
+      const params = new URLSearchParams(searchParams.toString());
 
-  // Efecto para auto-submit cuando cambia el texto debounced
+      Object.entries(updates).forEach(([key, value]) => {
+        if (value) {
+          params.set(key, value);
+        } else {
+          params.delete(key);
+        }
+      });
+
+      router.push(`/events?${params.toString()}`);
+    },
+    [router, searchParams]
+  );
+
+  // Auto-submit del search con debounce
   useEffect(() => {
-    // Saltamos el primer render para evitar submit al cargar la página
     if (isFirstRender.current) {
       isFirstRender.current = false;
       return;
     }
+    updateParams({ search: debouncedSearch });
+  }, [debouncedSearch, updateParams]);
 
-    // Enviamos el formulario programáticamente
-    formRef.current?.requestSubmit();
-  }, [debouncedSearch]);
-
-  // Handler para auto-submit de selects
-  const handleFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    e.currentTarget.form?.requestSubmit(); // Usamos evento directo para select
+  const handleSelectChange = (key: string) => (e: React.ChangeEvent<HTMLSelectElement>) => {
+    updateParams({ [key]: e.target.value });
   };
 
-  // Handler para input de búsqueda (actualiza estado local)
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(e.target.value);
+  // Filtros activos para mostrar como badges
+  const activeFilters: { key: string; label: string }[] = [];
+  if (currentFilters.search) activeFilters.push({ key: 'search', label: `"${currentFilters.search}"` });
+  if (currentFilters.category) activeFilters.push({ key: 'category', label: CATEGORY_LABELS[currentFilters.category] });
+  if (currentFilters.status) activeFilters.push({ key: 'status', label: STATUS_LABELS[currentFilters.status as keyof typeof STATUS_LABELS] });
+  if (currentFilters.priceMax !== undefined) activeFilters.push({ key: 'priceMax', label: PRICE_LABELS[String(currentFilters.priceMax)] });
+
+  const hasFilters = activeFilters.length > 0;
+
+  const removeFilter = (key: string) => {
+    if (key === 'search') setSearchTerm('');
+    updateParams({ [key]: '' });
+  };
+
+  const clearAll = () => {
+    setSearchTerm('');
+    router.push('/events');
   };
 
   return (
     <div className="space-y-4 rounded-lg border bg-card p-4">
-      {/* Formulario con method GET */}
-      <form ref={formRef} method="GET" action="/events" className="space-y-4">
+      {/* Inputs */}
+      <div className="space-y-4">
         {/* Búsqueda */}
         <div className="flex gap-2">
           <div className="relative flex-1">
@@ -85,21 +119,19 @@ export function EventFiltersForm({ currentFilters }: EventFiltersFormProps): Rea
               name="search"
               placeholder="Buscar eventos..."
               value={searchTerm}
-              onChange={handleSearchChange}
+              onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-9"
             />
           </div>
-          {/* Botón de búsqueda (opcional pero bueno para accesibilidad) */}
-          <Button type="submit">Buscar</Button>
         </div>
 
-        {/* Filtros adicionales */}
+        {/* Selects */}
         <div className="flex flex-wrap gap-4">
           {/* Categoría */}
           <select
             name="category"
-            defaultValue={currentFilters.category ?? ''}
-            onChange={handleFilterChange}
+            value={currentFilters.category ?? ''}
+            onChange={handleSelectChange('category')}
             className="h-10 w-[180px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
           >
             <option value="">Todas las categorías</option>
@@ -113,8 +145,8 @@ export function EventFiltersForm({ currentFilters }: EventFiltersFormProps): Rea
           {/* Status */}
           <select
             name="status"
-            defaultValue={currentFilters.status ?? ''}
-            onChange={handleFilterChange}
+            value={currentFilters.status ?? ''}
+            onChange={handleSelectChange('status')}
             className="h-10 w-[180px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
           >
             <option value="">Todos los estados</option>
@@ -125,11 +157,11 @@ export function EventFiltersForm({ currentFilters }: EventFiltersFormProps): Rea
             ))}
           </select>
 
-          {/* Precio maximo */}
+          {/* Precio máximo */}
           <select
             name="priceMax"
-            defaultValue={currentFilters.priceMax?.toString() ?? ''}
-            onChange={handleFilterChange}
+            value={currentFilters.priceMax?.toString() ?? ''}
+            onChange={handleSelectChange('priceMax')}
             className="h-10 w-[180px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
           >
             <option value="">Cualquier precio</option>
@@ -139,17 +171,39 @@ export function EventFiltersForm({ currentFilters }: EventFiltersFormProps): Rea
             <option value="100">Hasta $100</option>
             <option value="200">Hasta $200</option>
           </select>
-
-          {/* Botón limpiar */}
-          {hasFilters && (
-            <Link href="/events">
-              <Button type="button" variant="ghost" className="gap-2">
-                Limpiar filtros
-              </Button>
-            </Link>
-          )}
         </div>
-      </form>
+      </div>
+
+      {/* Filtros activos (badges) */}
+      {hasFilters && (
+        <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+          <span className="text-sm text-muted-foreground">Filtros activos:</span>
+          {activeFilters.map(({ key, label }) => (
+            <span
+              key={key}
+              className="flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary"
+            >
+              {label}
+              <button
+                onClick={() => removeFilter(key)}
+                className="ml-1 rounded-full hover:text-primary/70"
+                aria-label={`Quitar filtro ${label}`}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={clearAll}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            Limpiar todo
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
